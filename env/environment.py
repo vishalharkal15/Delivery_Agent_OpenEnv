@@ -15,6 +15,7 @@ class DeliveryEnv:
         self.completed = 0
 
         self.orders = []
+
         self.vehicles = [
             Vehicle(
                 id=str(i),
@@ -26,7 +27,12 @@ class DeliveryEnv:
             )
             for i in range(self.num_vehicles)
         ]
-        self.vehicle_stats = {str(i): 0 for i in range(self.num_vehicles)}
+
+        # Track deliveries per vehicle
+        self.vehicle_stats = {v.id: 0 for v in self.vehicles}
+
+        # 🔥 Route memory for each vehicle
+        self.vehicle_routes = {v.id: [] for v in self.vehicles}
 
         return self._get_obs()
 
@@ -53,23 +59,29 @@ class DeliveryEnv:
             vehicle = next((v for v in self.vehicles if v.id == vid), None)
 
             if not vehicle:
-                reward -= 0.2  # invalid vehicle
+                reward -= 0.2
                 continue
 
+            # Capacity constraint
             if len(order_ids) > vehicle.capacity:
-                reward -= 0.3  # over capacity
+                reward -= 0.3
                 order_ids = order_ids[:vehicle.capacity]
 
-            if not order_ids:
+            # 🔥 Initialize route ONLY if empty
+            if not self.vehicle_routes[vid]:
+                self.vehicle_routes[vid] = order_ids.copy()
+
+            route = self.vehicle_routes[vid]
+
+            if not route:
                 reward -= 0.05  # idle
                 continue
 
-            # 👉 ONLY FIRST ORDER (sequential routing)
-            oid = order_ids[0]
-            order = next((o for o in self.orders if o.id == oid), None)
+            current_oid = route[0]
+            order = next((o for o in self.orders if o.id == current_oid), None)
 
             if not order or order.delivered:
-                reward -= 0.2
+                route.pop(0)
                 continue
 
             # Move toward target
@@ -87,23 +99,31 @@ class DeliveryEnv:
                 vehicle.location = (lat, lon)
                 self.total_distance += dist
 
-            # Delivery check
-            if self.distance(vehicle.location, order.location) < 0.0005:
-                order.delivered = True
-                delivered_orders.add(order.id)
-                self.completed += 1
+            # 🔥 Deliver ANY nearby order (important realism)
+            for o in self.orders:
+                if o.delivered:
+                    continue
 
-                self.vehicle_stats[vehicle.id] += 1  # ✅ FIXED
+                if self.distance(vehicle.location, o.location) < 0.0005:
+                    o.delivered = True
+                    delivered_orders.add(o.id)
+                    self.completed += 1
 
-                if self.time <= order.deadline:
-                    reward += 1
-                else:
-                    reward -= 0.5
+                    self.vehicle_stats[vehicle.id] += 1
 
-        # Remove delivered orders
+                    if self.time <= o.deadline:
+                        reward += 1
+                    else:
+                        reward -= 0.5
+
+                    # Remove from route if present
+                    if o.id in route:
+                        route.remove(o.id)
+
+        # Remove delivered orders globally
         self.orders = [o for o in self.orders if not o.delivered]
 
-        # Global penalty
+        # Small global penalty
         reward -= 0.02 * len(self.vehicles)
 
         done = self.time >= self.max_steps
