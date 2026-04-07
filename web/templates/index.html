@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Delivery Control Center</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            font-family: Arial;
+            background: #0f172a;
+            color: white;
+        }
+
+        #sidebar {
+            width: 320px;
+            padding: 20px;
+            background: #1e293b;
+        }
+
+        #map {
+            flex: 1;
+            height: 100vh;
+        }
+
+        canvas {
+            margin-top: 15px;
+            background: #111827;
+            border-radius: 10px;
+        }
+
+        input, button {
+            width: 100%;
+            margin-top: 10px;
+            padding: 8px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div id="sidebar">
+    <h2>🚚 AI Delivery</h2>
+
+    <label>Vehicles</label>
+    <input type="number" id="vehicles" value="3">
+
+    <button onclick="resetSimulation()">Reset</button>
+
+    <h3>📊 Metrics</h3>
+    <p>Reward: <span id="reward">0</span></p>
+    <p>Score: <span id="score">0</span></p>
+    <p>Delivery Rate: <span id="delivery">0</span></p>
+
+    <canvas id="chart"></canvas>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="/static/script.js"></script>
+
+</body>
+</html>

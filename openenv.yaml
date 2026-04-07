@@ -1,0 +1,5 @@
+name: delivery-optimization-env
+entry_point: tasks.hard:create_env
+observation_space: Observation
+action_space: Action
+reward: dense
