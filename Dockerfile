@@ -6,4 +6,4 @@ COPY . .
 
 RUN pip install -r requirements.txt
 
-CMD ["python", "scripts/run_baseline.py"]
+CMD ["python", "inference.py"]

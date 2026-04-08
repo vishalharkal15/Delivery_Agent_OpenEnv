@@ -53,8 +53,12 @@ def step():
 def reset():
     global env, obs
 
-    data = request.get_json()
-    vehicles = int(data.get("vehicles", 2))
+    data = request.get_json(silent=True) or {}
+
+    try:
+        vehicles = int(data.get("vehicles", 2))
+    except (TypeError, ValueError):
+        vehicles = 2
 
     env = create_env(num_vehicles=vehicles)
     obs = env.reset()
