@@ -18,15 +18,18 @@ def simple_agent(obs):
     return Action(assignments=assignments)
 
 
-env = create_env()
-obs = env.reset()
+def main():
+    env = create_env()
+    obs = env.reset()
 
-done = False
+    done = False
+    while not done:
+        action = simple_agent(obs)
+        obs, reward, done, _ = env.step(action)
 
-while not done:
-    action = simple_agent(obs)
-    obs, reward, done, _ = env.step(action)
+    score = grade(env)
+    print("Final Score:", score)
 
-score = grade(env)
 
-print("Final Score:", score)
+if __name__ == "__main__":
+    main()

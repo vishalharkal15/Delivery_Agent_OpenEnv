@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "delivery-optimization-agent"
+version = "0.1.0"
+description = "OpenEnv delivery optimization environment and inference server"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110.0",
+    "pydantic>=2.0.0",
+    "uvicorn>=0.30.0",
+    "flask>=3.0.0",
+    "matplotlib>=3.7.0",
+]
+
+[project.scripts]
+server = "inference:main"
+
+[tool.setuptools]
+py-modules = ["inference"]
+
+[tool.setuptools.packages.find]
+include = ["env*", "tasks*"]

@@ -1,3 +1,4 @@
+import argparse
 import os
 
 from flask import Flask, jsonify, request
@@ -10,6 +11,7 @@ app = Flask(__name__)
 
 env = create_env()
 obs = env.reset()
+
 
 
 def _model_dump(model):
@@ -126,6 +128,15 @@ def step():
     })
 
 
+def main():
+    parser = argparse.ArgumentParser(description="Run the delivery optimization inference server")
+    parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "7860")))
+    parser.add_argument("--debug", action="store_true")
+    args = parser.parse_args()
+
+    app.run(host=args.host, port=args.port, debug=args.debug)
+
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "7860"))
-    app.run(host="0.0.0.0", port=port)
+    main()
