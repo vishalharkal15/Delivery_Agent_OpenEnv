@@ -36,6 +36,23 @@ def _has_required_openenv_dependency(repo_root: Path):
     return False, "missing openenv-core>=0.2.0 or openenv>=0.2.0"
 
 
+def _validate_server_entrypoint(repo_root: Path):
+    server_path = repo_root / "server" / "app.py"
+    if not server_path.exists():
+        return False, "missing"
+
+    content = server_path.read_text(encoding="utf-8")
+    has_main = "def main(" in content
+    has_main_guard = "if __name__ == \"__main__\":" in content or "if __name__ == '__main__':" in content
+
+    if not has_main:
+        return False, "missing main() function"
+    if not has_main_guard:
+        return False, "missing if __name__ == '__main__'"
+
+    return True, "main() and __main__ guard present"
+
+
 def _validate_reset_endpoint(repo_root: Path):
     inference_path = repo_root / "inference.py"
     if not inference_path.exists():
@@ -82,8 +99,8 @@ def run_validate(repo_root: Path):
     inference_ok = _check_file(repo_root / "inference.py")
     checks.append(("inference.py at repo root", inference_ok, "present" if inference_ok else "missing"))
 
-    server_ok = _check_file(repo_root / "server" / "app.py")
-    checks.append(("server/app.py", server_ok, "present" if server_ok else "missing"))
+    server_ok, server_msg = _validate_server_entrypoint(repo_root)
+    checks.append(("server/app.py", server_ok, server_msg))
 
     openenv_ok = _check_file(repo_root / "openenv.yaml")
     checks.append(("openenv.yaml at repo root", openenv_ok, "present" if openenv_ok else "missing"))
