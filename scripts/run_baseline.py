@@ -1,0 +1,35 @@
+import os
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from tasks.hard import create_env
+from env.models import Action
+from env.grader import grade
+
+
+def simple_agent(obs):
+    assignments = {}
+
+    for v in obs.vehicles:
+        pending = [o.id for o in obs.orders if not o.delivered]
+        assignments[v.id] = pending[:1]
+
+    return Action(assignments=assignments)
+
+
+def main():
+    env = create_env()
+    obs = env.reset()
+
+    done = False
+    while not done:
+        action = simple_agent(obs)
+        obs, reward, done, _ = env.step(action)
+
+    score = grade(env)
+    print("Final Score:", score)
+
+
+if __name__ == "__main__":
+    main()
