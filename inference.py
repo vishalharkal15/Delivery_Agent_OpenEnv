@@ -1,10 +1,19 @@
 import argparse
+import json
 import os
 import socket
+import sys
+import time
+
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 from flask import Flask, jsonify, request
 from pydantic import ValidationError
 
+from agents.baseline import baseline_agent
+from env.grader import grade
 from env.models import Action
 from tasks.hard import create_env
 
@@ -128,12 +137,76 @@ def step():
     })
 
 
+def run_episode(max_steps=100, timeout_seconds=20.0):
+    global env, obs
+
+    env = create_env()
+    obs = env.reset()
+
+    steps = 0
+    done = False
+    total_reward = 0.0
+    timed_out = False
+    started_at = time.monotonic()
+    last_assignments = {}
+
+    while not done and steps < max_steps:
+        if time.monotonic() - started_at > timeout_seconds:
+            timed_out = True
+            break
+
+        try:
+            action = baseline_agent(obs)
+        except Exception:
+            # Fall back to no-op assignments to keep inference bounded.
+            action = Action(assignments={v.id: [] for v in obs.vehicles})
+
+        last_assignments = {
+            str(vehicle_id): [int(order_id) for order_id in order_ids]
+            for vehicle_id, order_ids in action.assignments.items()
+        }
+
+        try:
+            obs, reward, done, _ = env.step(action)
+        except Exception:
+            timed_out = True
+            break
+
+        total_reward += float(reward)
+        steps += 1
+
+    result = {
+        "status": "ok",
+        "done": bool(done),
+        "timed_out": bool(timed_out),
+        "steps": int(steps),
+        "total_reward": float(total_reward),
+        "score": float(grade(env)),
+        "action": {"assignments": last_assignments},
+        "assignments": last_assignments,
+        "observation": _observation_to_dict(obs),
+    }
+    return result
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Run the delivery optimization inference server")
+    parser = argparse.ArgumentParser(description="Run delivery optimization inference")
+    parser.add_argument("--serve", action="store_true", help="Run Flask server mode")
     parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "7860")))
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--max-steps", type=int, default=int(os.environ.get("MAX_STEPS", "100")))
+    parser.add_argument("--timeout-seconds", type=float, default=float(os.environ.get("TIMEOUT_SECONDS", "20.0")))
     args = parser.parse_args()
+
+    if not args.serve:
+        try:
+            result = run_episode(max_steps=max(1, args.max_steps), timeout_seconds=max(1.0, args.timeout_seconds))
+        except Exception as exc:
+            result = {"status": "error", "error": str(exc), "action": {"assignments": {}}, "assignments": {}}
+
+        print(json.dumps(result), flush=True)
+        return
 
     selected_port = args.port
     for candidate_port in range(args.port, args.port + 20):
