@@ -129,7 +129,7 @@ def step(payload: dict[str, Any] | None = None) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run OpenEnv FastAPI server")
     parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
-    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "7860")))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
     args = parser.parse_args()
 
     uvicorn.run("server.app:app", host=args.host, port=args.port)

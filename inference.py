@@ -1,5 +1,6 @@
 import argparse
 import os
+import socket
 
 from flask import Flask, jsonify, request
 from pydantic import ValidationError
@@ -134,7 +135,20 @@ def main():
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
-    app.run(host=args.host, port=args.port, debug=args.debug)
+    selected_port = args.port
+    for candidate_port in range(args.port, args.port + 20):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.bind((args.host, candidate_port))
+                selected_port = candidate_port
+                break
+            except OSError:
+                continue
+
+    if selected_port != args.port:
+        print(f"Port {args.port} is in use. Starting inference server on {selected_port} instead.")
+
+    app.run(host=args.host, port=selected_port, debug=args.debug, use_reloader=False)
 
 
 if __name__ == "__main__":
