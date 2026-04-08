@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import importlib.util
-import json
 import os
 import sys
 from pathlib import Path
@@ -43,6 +42,9 @@ def _validate_reset_endpoint(repo_root: Path):
 
 def run_validate(repo_root: Path):
     checks = []
+
+    pyproject_ok = _check_file(repo_root / "pyproject.toml")
+    checks.append(("pyproject.toml at repo root", pyproject_ok, "present" if pyproject_ok else "missing"))
 
     dockerfile_ok = _check_file(repo_root / "Dockerfile")
     checks.append(("Dockerfile at repo root", dockerfile_ok, "present" if dockerfile_ok else "missing"))
