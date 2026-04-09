@@ -1,5 +1,4 @@
 import argparse
-import json
 import os
 import socket
 import sys
@@ -149,6 +148,7 @@ def run_episode(max_steps=100, timeout_seconds=20.0):
     timed_out = False
     started_at = time.monotonic()
     last_assignments = {}
+    step_records = []
 
     while not done and steps < max_steps:
         if time.monotonic() - started_at > timeout_seconds:
@@ -174,6 +174,11 @@ def run_episode(max_steps=100, timeout_seconds=20.0):
 
         total_reward += float(reward)
         steps += 1
+        step_records.append({
+            "step": int(steps),
+            "reward": float(reward),
+            "done": bool(done),
+        })
 
     result = {
         "status": "ok",
@@ -185,8 +190,37 @@ def run_episode(max_steps=100, timeout_seconds=20.0):
         "action": {"assignments": last_assignments},
         "assignments": last_assignments,
         "observation": _observation_to_dict(obs),
+        "step_records": step_records,
     }
     return result
+
+
+def emit_structured_output(result, task_name):
+    print(f"[START] task={task_name}", flush=True)
+
+    step_records = result.get("step_records", [])
+    if step_records:
+        for item in step_records:
+            step_value = int(item.get("step", 0))
+            reward_value = float(item.get("reward", 0.0))
+            done_value = str(bool(item.get("done", False))).lower()
+            print(
+                f"[STEP] step={step_value} reward={reward_value:.6f} done={done_value}",
+                flush=True,
+            )
+    else:
+        done_value = str(bool(result.get("done", True))).lower()
+        print(f"[STEP] step=0 reward=0.000000 done={done_value}", flush=True)
+
+    end_score = float(result.get("score", 0.0))
+    end_steps = int(result.get("steps", 0))
+    end_done = str(bool(result.get("done", False))).lower()
+    end_timeout = str(bool(result.get("timed_out", False))).lower()
+    end_status = str(result.get("status", "ok"))
+    print(
+        f"[END] task={task_name} score={end_score:.6f} steps={end_steps} done={end_done} timed_out={end_timeout} status={end_status}",
+        flush=True,
+    )
 
 
 def main():
@@ -197,15 +231,26 @@ def main():
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--max-steps", type=int, default=int(os.environ.get("MAX_STEPS", "100")))
     parser.add_argument("--timeout-seconds", type=float, default=float(os.environ.get("TIMEOUT_SECONDS", "20.0")))
+    parser.add_argument("--task-name", default=os.environ.get("TASK_NAME", "delivery-optimization-env"))
     args = parser.parse_args()
 
     if not args.serve:
         try:
             result = run_episode(max_steps=max(1, args.max_steps), timeout_seconds=max(1.0, args.timeout_seconds))
         except Exception as exc:
-            result = {"status": "error", "error": str(exc), "action": {"assignments": {}}, "assignments": {}}
+            result = {
+                "status": "error",
+                "error": str(exc),
+                "done": True,
+                "timed_out": True,
+                "steps": 0,
+                "score": 0.0,
+                "step_records": [],
+                "action": {"assignments": {}},
+                "assignments": {},
+            }
 
-        print(json.dumps(result), flush=True)
+        emit_structured_output(result, args.task_name)
         return
 
     selected_port = args.port
