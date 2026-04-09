@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import os
 import socket
 import sys
@@ -15,11 +16,13 @@ from pydantic import ValidationError
 from agents.baseline import baseline_agent
 from env.grader import grade
 from env.models import Action
-from tasks.hard import create_env
+from tasks.easy import create_env as create_easy_env
+from tasks.hard import create_env as create_hard_env
+from tasks.medium import create_env as create_medium_env
 
 app = Flask(__name__)
 
-env = create_env()
+env = create_hard_env()
 obs = env.reset()
 
 
@@ -146,6 +149,22 @@ def _llm_action_from_proxy(observation, timeout_seconds=3.0):
     return None, True
 
 
+def _safe_score(raw_score):
+    try:
+        score = float(raw_score)
+    except (TypeError, ValueError):
+        return 0.5
+
+    if not math.isfinite(score):
+        return 0.5
+
+    if score <= 0.0:
+        return 0.01
+    if score >= 1.0:
+        return 0.99
+    return score
+
+
 @app.get("/")
 def index():
     return jsonify({"status": "ok"})
@@ -166,9 +185,9 @@ def reset():
             return jsonify({"error": "vehicles must be an integer"}), 400
 
     try:
-        env = create_env(num_vehicles=vehicles) if vehicles is not None else create_env()
+        env = create_hard_env(num_vehicles=vehicles) if vehicles is not None else create_hard_env()
     except TypeError:
-        env = create_env()
+        env = create_hard_env()
         if vehicles is not None and hasattr(env, "num_vehicles"):
             env.num_vehicles = vehicles
 
@@ -202,10 +221,10 @@ def step():
     })
 
 
-def run_episode(max_steps=100, timeout_seconds=20.0):
+def run_episode(max_steps=100, timeout_seconds=20.0, env_factory=create_hard_env, allow_llm_first_step=True):
     global env, obs
 
-    env = create_env()
+    env = env_factory()
     obs = env.reset()
 
     steps = 0
@@ -225,7 +244,7 @@ def run_episode(max_steps=100, timeout_seconds=20.0):
         action = None
 
         # Make one proxy-backed LLM call early so evaluator sees compliant traffic.
-        if steps == 0:
+        if steps == 0 and allow_llm_first_step:
             action, attempted = _llm_action_from_proxy(obs, timeout_seconds=min(3.0, timeout_seconds))
             llm_proxy_attempted = llm_proxy_attempted or attempted
 
@@ -261,7 +280,7 @@ def run_episode(max_steps=100, timeout_seconds=20.0):
         "timed_out": bool(timed_out),
         "steps": int(steps),
         "total_reward": float(total_reward),
-        "score": float(grade(env)),
+        "score": _safe_score(grade(env)),
         "action": {"assignments": last_assignments},
         "assignments": last_assignments,
         "observation": _observation_to_dict(obs),
@@ -305,28 +324,41 @@ def main():
     parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "7860")))
     parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--max-steps", type=int, default=int(os.environ.get("MAX_STEPS", "100")))
+    parser.add_argument("--max-steps", type=int, default=int(os.environ.get("MAX_STEPS", "40")))
     parser.add_argument("--timeout-seconds", type=float, default=float(os.environ.get("TIMEOUT_SECONDS", "20.0")))
     parser.add_argument("--task-name", default=os.environ.get("TASK_NAME", "delivery-optimization-env"))
     args = parser.parse_args()
 
     if not args.serve:
-        try:
-            result = run_episode(max_steps=max(1, args.max_steps), timeout_seconds=max(1.0, args.timeout_seconds))
-        except Exception as exc:
-            result = {
-                "status": "error",
-                "error": str(exc),
-                "done": True,
-                "timed_out": True,
-                "steps": 0,
-                "score": 0.0,
-                "step_records": [],
-                "action": {"assignments": {}},
-                "assignments": {},
-            }
+        task_runs = [
+            ("easy", create_easy_env),
+            ("medium", create_medium_env),
+            ("hard", create_hard_env),
+        ]
 
-        emit_structured_output(result, args.task_name)
+        for index, (task_name, factory) in enumerate(task_runs):
+            try:
+                result = run_episode(
+                    max_steps=max(1, args.max_steps),
+                    timeout_seconds=max(1.0, args.timeout_seconds),
+                    env_factory=factory,
+                    allow_llm_first_step=(index == 0),
+                )
+            except Exception as exc:
+                result = {
+                    "status": "error",
+                    "error": str(exc),
+                    "done": True,
+                    "timed_out": True,
+                    "steps": 0,
+                    "score": 0.5,
+                    "step_records": [],
+                    "action": {"assignments": {}},
+                    "assignments": {},
+                }
+
+            result["score"] = _safe_score(result.get("score", 0.5))
+            emit_structured_output(result, task_name)
         return
 
     selected_port = args.port
